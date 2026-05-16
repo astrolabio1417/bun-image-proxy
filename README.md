@@ -55,7 +55,7 @@ bun install
 ### Running the Development Server
 
 ```
-bun run index.ts
+bun run dev
 ```
 
 ---
