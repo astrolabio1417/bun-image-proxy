@@ -6,6 +6,6 @@ COPY package.json .
 COPY bun.lock .
 COPY . .
 
-RUN bun install
+RUN bun install && bun run build
 
 ENTRYPOINT [ "bun", "run", "start" ]
