@@ -4,6 +4,8 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(",")
     : ["http://localhost"];
 
+const SCRAPER_API_URL = process.env.SCRAPER_API_URL || "";
+
 const server = Bun.serve({
     async fetch(req) {
         const origin = req.headers.get("origin");
@@ -23,8 +25,7 @@ const server = Bun.serve({
                 isAllowed = false;
             }
         } else if (!origin && !referer) {
-            // Allow or deny direct browser URL access
-            isAllowed = false;
+            isAllowed = true;
         }
 
         if (!isAllowed && !ALLOWED_ORIGINS.includes("*")) {
@@ -65,18 +66,36 @@ const server = Bun.serve({
             }
         }
 
-        console.log(forwardHeaders);
+        let arrayBuffer: ArrayBuffer;
 
-        const imageRes = await fetch(imageUrl, {
-            method: "GET",
-            headers: forwardHeaders,
-        });
+        if (SCRAPER_API_URL) {
+            const scraperUrl = `${SCRAPER_API_URL}/api/download?url=${encodeURIComponent(imageUrl)}`;
+            const imageRes = await fetch(scraperUrl);
 
-        if (!imageRes.ok) {
-            return new Response("Failed to fetch image", { status: 500 });
+            if (!imageRes.ok) {
+                console.error(
+                    `[proxy] Scraper failed (${imageRes.status}): ${imageUrl}`,
+                );
+                return new Response("Failed to fetch image", { status: 502 });
+            }
+
+            arrayBuffer = await imageRes.arrayBuffer();
+        } else {
+            const imageRes = await fetch(imageUrl, {
+                method: "GET",
+                headers: forwardHeaders,
+            });
+
+            if (!imageRes.ok) {
+                console.error(
+                    `[proxy] Fetch failed (${imageRes.status}): ${imageUrl}`,
+                );
+                return new Response("Failed to fetch image", { status: 500 });
+            }
+
+            arrayBuffer = await imageRes.arrayBuffer();
         }
 
-        const arrayBuffer = await imageRes.arrayBuffer();
         let imagePipeline = new Bun.Image(arrayBuffer);
 
         const width = Number(url.searchParams.get("w")) || null;
@@ -86,9 +105,10 @@ const server = Bun.serve({
             imagePipeline = imagePipeline.resize(width, height, { fit });
         }
 
-        const processedImage = imagePipeline.webp({ quality });
+        const processed = imagePipeline.webp({ quality });
+        const buffer = await processed.bytes();
 
-        return new Response(processedImage, {
+        return new Response(buffer as BodyInit, {
             headers: {
                 "Content-Type": "image/webp",
                 "Cache-Control": "public, max-age=31536000, immutable",

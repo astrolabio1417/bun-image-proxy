@@ -1,0 +1,25 @@
+services:
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile.dev
+        ports:
+            - 3000:3000
+        environment:
+            PORT: 3000
+            ALLOWED_ORIGINS: "http://localhost:3000"
+            SCRAPER_API_URL: "http://scraper-api:5001"
+        depends_on:
+            - scraper-api
+        volumes:
+            - .:/app
+            - app_node_modules:/app/node_modules
+        command: sh -c "bun run dev"
+
+    scraper-api:
+        image: ghcr.io/astrolabio1417/scraper-api:latest
+        ports:
+            - 5001:5001
+
+volumes:
+    app_node_modules:
